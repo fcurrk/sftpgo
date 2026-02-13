@@ -1,14 +1,7 @@
 name: Docker
 
 on:
-  #schedule:
-  #  - cron: '0 4 * * *' # everyday at 4:00 AM UTC
-  push:
-    branches:
-      - main
-    tags:
-      - v*
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -76,7 +69,7 @@ jobs:
           elif [[ $DOCKER_PKG == debian ]]; then
             FEATURES="${FEATURES},unixcrypt"
           fi
-          DOCKER_IMAGES=("drakkan/sftpgo" "ghcr.io/drakkan/sftpgo")
+          DOCKER_IMAGES=("fcurrk/sftpgo" "ghcr.io/fcurrk/sftpgo")
           TAGS="${DOCKER_IMAGES[0]}:${VERSION}"
           TAGS_SLIM="${DOCKER_IMAGES[0]}:${VERSION_SLIM}"
 
@@ -179,9 +172,9 @@ jobs:
           labels: |
             org.opencontainers.image.title=SFTPGo
             org.opencontainers.image.description=Full-featured and highly configurable file transfer server: SFTP, HTTP/S,FTP/S, WebDAV
-            org.opencontainers.image.url=https://github.com/drakkan/sftpgo
-            org.opencontainers.image.documentation=https://github.com/drakkan/sftpgo/blob/${{ github.sha }}/docker/README.md
-            org.opencontainers.image.source=https://github.com/drakkan/sftpgo
+            org.opencontainers.image.url=https://github.com/fcurrk/sftpgo
+            org.opencontainers.image.documentation=https://github.com/fcurrk/sftpgo/blob/${{ github.sha }}/docker/README.md
+            org.opencontainers.image.source=https://github.com/fcurrk/sftpgo
             org.opencontainers.image.version=${{ steps.info.outputs.version }}
             org.opencontainers.image.created=${{ steps.info.outputs.created }}
             org.opencontainers.image.revision=${{ github.sha }}

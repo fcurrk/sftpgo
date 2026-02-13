@@ -1,4 +1,4 @@
-name: Release
+﻿name: Build
 
 on:
   workflow_dispatch:
@@ -11,36 +11,6 @@ env:
   GO_VERSION: 1.25.3
 
 jobs:
-  prepare-sources-with-deps:
-    name: Prepare sources with deps
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Get SFTPGo version
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
-
-      - name: Prepare release
-        run: |
-          go mod vendor
-          echo "${SFTPGO_VERSION}" > VERSION.txt
-          echo "${GITHUB_SHA::8}" >> VERSION.txt
-          tar cJvf sftpgo_${SFTPGO_VERSION}_src_with_deps.tar.xz *
-        env:
-          SFTPGO_VERSION: ${{ steps.get_version.outputs.VERSION }}
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.VERSION }}_src_with_deps.tar.xz
-          path: ./sftpgo_${{ steps.get_version.outputs.VERSION }}_src_with_deps.tar.xz
-          retention-days: 1
-
   prepare-windows:
     name: Prepare Windows binaries
     runs-on: windows-2022
@@ -168,75 +138,6 @@ jobs:
           path: ./sftpgo_portable.zip
           retention-days: 1
 
-  prepare-mac:
-    name: Prepare macOS binaries
-    runs-on: macos-13
-
-    steps:
-      - uses: actions/checkout@v6
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Get SFTPGo version
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
-        shell: bash
-
-      - name: Build for macOS x86_64
-        run: go build -trimpath -tags nopgxregisterdefaulttypes,disable_grpc_modules -ldflags "-s -w -X github.com/drakkan/sftpgo/v2/internal/version.commit=`git describe --always --abbrev=8 --dirty` -X github.com/drakkan/sftpgo/v2/internal/version.date=`date -u +%FT%TZ`" -o sftpgo
-
-      - name: Build for macOS arm64
-        run: CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 SDKROOT=$(xcrun --sdk macosx --show-sdk-path) go build -trimpath -tags nopgxregisterdefaulttypes,disable_grpc_modules -ldflags "-s -w -X github.com/drakkan/sftpgo/v2/internal/version.commit=`git describe --always --abbrev=8 --dirty` -X github.com/drakkan/sftpgo/v2/internal/version.date=`date -u +%FT%TZ`" -o sftpgo_arm64
-
-      - name: Initialize data provider
-        run: ./sftpgo initprovider
-        shell: bash
-
-      - name: Prepare Release
-        run: |
-          mkdir -p output/{init,sqlite,bash_completion,zsh_completion}
-          echo "For documentation please take a look here:" > output/README.txt
-          echo "" >> output/README.txt
-          echo "https://docs.sftpgo.com" >> output/README.txt
-          cp LICENSE output/
-          cp NOTICE output/
-          cp sftpgo output/
-          cp sftpgo.json output/
-          cp sftpgo.db output/sqlite/
-          cp -r static output/
-          cp -r openapi output/
-          cp -r templates output/
-          cp init/com.github.drakkan.sftpgo.plist output/init/
-          ./sftpgo gen completion bash > output/bash_completion/sftpgo
-          ./sftpgo gen completion zsh > output/zsh_completion/_sftpgo
-          ./sftpgo gen man -d output/man/man1
-          gzip output/man/man1/*
-          cd output
-          tar cJvf ../sftpgo_${SFTPGO_VERSION}_macOS_x86_64.tar.xz *
-          cd ..
-          cp sftpgo_arm64 output/sftpgo
-          cd output
-          tar cJvf ../sftpgo_${SFTPGO_VERSION}_macOS_arm64.tar.xz *
-          cd ..
-        env:
-          SFTPGO_VERSION: ${{ steps.get_version.outputs.VERSION }}
-
-      - name: Upload macOS x86_64 artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.VERSION }}_macOS_x86_64.tar.xz
-          path: ./sftpgo_${{ steps.get_version.outputs.VERSION }}_macOS_x86_64.tar.xz
-          retention-days: 1
-
-      - name: Upload macOS arm64 artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.VERSION }}_macOS_arm64.tar.xz
-          path: ./sftpgo_${{ steps.get_version.outputs.VERSION }}_macOS_arm64.tar.xz
-          retention-days: 1
-
   prepare-linux:
     name: Prepare Linux binaries
     runs-on: ubuntu-latest
@@ -255,12 +156,12 @@ jobs:
             deb-arch: arm64
             rpm-arch: aarch64
             tar-arch: arm64
-          - arch: ppc64le
-            distro: ubuntu18.04
-            go-arch: ppc64le
-            deb-arch: ppc64el
-            rpm-arch: ppc64le
-            tar-arch: ppc64le
+#          - arch: ppc64le
+#            distro: ubuntu18.04
+#            go-arch: ppc64le
+#            deb-arch: ppc64el
+#            rpm-arch: ppc64le
+#            tar-arch: ppc64le
           - arch: armv7
             distro: ubuntu18.04
             go-arch: arm7
@@ -458,136 +359,3 @@ jobs:
           name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_bundle.tar.xz
           path: ./bundle/sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_bundle.tar.xz
           retention-days: 1
-
-  create-release:
-    name: Release
-    needs: [prepare-linux-bundle, prepare-sources-with-deps, prepare-mac, prepare-windows]
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-      - name: Get versions
-        id: get_version
-        run: |
-          SFTPGO_VERSION=${GITHUB_REF/refs\/tags\//}
-          PKG_VERSION=${SFTPGO_VERSION:1}
-          echo "SFTPGO_VERSION=${SFTPGO_VERSION}" >> $GITHUB_OUTPUT
-          echo "PKG_VERSION=${PKG_VERSION}" >> $GITHUB_OUTPUT
-        shell: bash
-
-      - name: Download amd64 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_x86_64.tar.xz
-
-      - name: Download arm64 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_arm64.tar.xz
-
-      - name: Download ppc64le artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_ppc64le.tar.xz
-
-      - name: Download armv7 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_armv7.tar.xz
-
-      - name: Download Linux bundle artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_bundle.tar.xz
-
-      - name: Download Deb amd64 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.PKG_VERSION }}-1_amd64.deb
-
-      - name: Download Deb arm64 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.PKG_VERSION }}-1_arm64.deb
-
-      - name: Download Deb ppc64le artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.PKG_VERSION }}-1_ppc64el.deb
-
-      - name: Download Deb armv7 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.PKG_VERSION }}-1_armhf.deb
-
-      - name: Download RPM x86_64 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo-${{ steps.get_version.outputs.PKG_VERSION }}-1.x86_64.rpm
-
-      - name: Download RPM aarch64 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo-${{ steps.get_version.outputs.PKG_VERSION }}-1.aarch64.rpm
-
-      - name: Download RPM ppc64le artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo-${{ steps.get_version.outputs.PKG_VERSION }}-1.ppc64le.rpm
-
-      - name: Download RPM armv7 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo-${{ steps.get_version.outputs.PKG_VERSION }}-1.armv7hl.rpm
-
-      - name: Download macOS x86_64 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_macOS_x86_64.tar.xz
-
-      - name: Download macOS arm64 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_macOS_arm64.tar.xz
-
-      - name: Download Windows installer x86_64 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_windows_x86_64.exe
-
-      - name: Download Windows installer arm64 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_windows_arm64.exe
-
-      - name: Download Windows installer x86 artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_windows_x86.exe
-
-      - name: Download Windows portable artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_windows_portable.zip
-
-      - name: Download source with deps artifact
-        uses: actions/download-artifact@v7
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_src_with_deps.tar.xz
-
-      - name: Create release
-        run: |
-          mv sftpgo_windows_x86_64.exe sftpgo_${SFTPGO_VERSION}_windows_x86_64.exe
-          mv sftpgo_windows_arm64.exe sftpgo_${SFTPGO_VERSION}_windows_arm64.exe
-          mv sftpgo_windows_x86.exe sftpgo_${SFTPGO_VERSION}_windows_x86.exe
-          mv sftpgo_portable.zip sftpgo_${SFTPGO_VERSION}_windows_portable.zip
-          gh release create "${SFTPGO_VERSION}" -t "${SFTPGO_VERSION}"
-          gh release upload "${SFTPGO_VERSION}" sftpgo_*.xz --clobber
-          gh release upload "${SFTPGO_VERSION}" sftpgo-*.rpm --clobber
-          gh release upload "${SFTPGO_VERSION}" sftpgo_*.deb --clobber
-          gh release upload "${SFTPGO_VERSION}" sftpgo_*.exe --clobber
-          gh release upload "${SFTPGO_VERSION}" sftpgo_*.zip --clobber
-          gh release view "${SFTPGO_VERSION}"
-        env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-          SFTPGO_VERSION: ${{ steps.get_version.outputs.SFTPGO_VERSION }}
