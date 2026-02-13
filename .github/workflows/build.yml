@@ -313,8 +313,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-     - name: Get versions
+      - name: Get versions
         id: get_version
         run: |
           SFTPGO_VERSION=$(head -1 VERSION.txt | tr -d '\r\n')
@@ -324,6 +323,7 @@ jobs:
         shell: bash
         env:
           GO_VERSION: ${{ env.GO_VERSION }}
+
       - name: Download amd64 artifact
         uses: actions/download-artifact@v7
         with:
