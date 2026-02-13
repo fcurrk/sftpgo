@@ -313,13 +313,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get versions
+
+     - name: Get versions
         id: get_version
         run: |
           SFTPGO_VERSION=$(head -1 VERSION.txt | tr -d '\r\n')
           echo "SFTPGO_VERSION=${SFTPGO_VERSION}" >> $GITHUB_OUTPUT
+          echo "GO_VERSION=${GO_VERSION}" >> $GITHUB_OUTPUT
+          echo "COMMIT=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
         shell: bash
-
+        env:
+          GO_VERSION: ${{ env.GO_VERSION }}
       - name: Download amd64 artifact
         uses: actions/download-artifact@v7
         with:
