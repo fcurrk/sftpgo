@@ -4,42 +4,12 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write
   contents: write
 
 env:
   GO_VERSION: 1.25.3
 
 jobs:
-  prepare-sources-with-deps:
-    name: Prepare sources with deps
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Get SFTPGo version
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
-
-      - name: Prepare release
-        run: |
-          go mod vendor
-          echo "${SFTPGO_VERSION}" > VERSION.txt
-          echo "${GITHUB_SHA::8}" >> VERSION.txt
-          tar cJvf sftpgo_${SFTPGO_VERSION}_src_with_deps.tar.xz *
-        env:
-          SFTPGO_VERSION: ${{ steps.get_version.outputs.VERSION }}
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.VERSION }}_src_with_deps.tar.xz
-          path: ./sftpgo_${{ steps.get_version.outputs.VERSION }}_src_with_deps.tar.xz
-          retention-days: 1
   prepare-windows:
     name: Prepare Windows binaries
     runs-on: windows-2022
