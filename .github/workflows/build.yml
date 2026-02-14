@@ -27,15 +27,14 @@ jobs:
           $filePath = "internal/version/version.go"
           $content = Get-Content -Path $filePath -Raw
           if ($content -match 'version\s*=\s*"([^"]+)"') {
-              $raw_version = $matches[1].Trim()
-              Write-Host "原始版本号: $raw_version"
+              $SFTPGO_VERSION = $matches[1].Trim()
           }
-          $SFTPGO_VERSION = $raw_version -replace '^v', ''
           echo "SFTPGO_VERSION=$SFTPGO_VERSION" >> $env:GITHUB_OUTPUT
           echo "GO_VERSION=$env:GO_VERSION" >> $env:GITHUB_OUTPUT
-
           $commit = $env:GITHUB_SHA.Substring(0, [Math]::Min(8, $env:GITHUB_SHA.Length))
           echo "COMMIT=$commit" >> $env:GITHUB_OUTPUT
+          Write-Host "SFTPGO_VERSION: $SFTPGO_VERSION"
+          Write-Host "COMMIT: $commit"
         shell: pwsh
         env:
           GO_VERSION: ${{ env.GO_VERSION }}
