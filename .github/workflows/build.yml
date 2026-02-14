@@ -61,7 +61,7 @@ jobs:
           Remove-Item Env:\GOOS
           Remove-Item Env:\GOARCH
         env:
-          SFTPGO_VERSION: ${{ steps.get_version.outputs.VERSION }}
+          SFTPGO_VERSION: ${{ steps.get_version.outputs.SFTPGO_VERSION }}
 
       - name: Initialize data provider
         run: ./sftpgo initprovider
