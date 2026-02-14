@@ -109,6 +109,9 @@ jobs:
           copy .\output\sftpgo.db .\win-portable
           copy .\LICENSE .\win-portable\LICENSE.txt
           copy .\NOTICE .\win-portable\NOTICE.txt
+          copy .\examples\SFTPGo_install.cmd .\win-portable\安装卸载SFTPGo服务.cmd
+          copy .\examples\SFTPGo_setup.bat .\win-portable\开始运行SFTPGo.bat
+          copy .\examples\SFTPGo.url .\win-portable\开始SFTPGo.url
           mkdir win-portable\templates
           xcopy .\templates .\win-portable\templates\ /E
           mkdir win-portable\static
