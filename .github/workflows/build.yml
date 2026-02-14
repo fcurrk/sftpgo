@@ -23,16 +23,46 @@ jobs:
 
       - name: Get SFTPGo version
         id: get_version
-        run: |
-          $content = Get-Content -Path internal\version\version.go -Raw
-          if ($content -match 'version\s*=\s*"([^"]+)"') {
-              $SFTPGO_VERSION = $matches[1]
-          }
-          echo "SFTPGO_VERSION=$SFTPGO_VERSION" >> $env:GITHUB_OUTPUT
-          echo "GO_VERSION=$env:GO_VERSION" >> $env:GITHUB_OUTPUT
-          $commit = $env:GITHUB_SHA.Substring(0,8)
-          echo "COMMIT=$commit" >> $env:GITHUB_OUTPUT
-        shell: pwsh
+  run: |
+    # 定义文件路径（PowerShell 支持正斜杠）
+    $filePath = "internal/version/version.go"
+    
+    # 检查文件是否存在
+    if (-not (Test-Path $filePath)) {
+        Write-Error "文件 $filePath 不存在"
+        exit 1
+    }
+    
+    # 读取整个文件
+    $content = Get-Content -Path $filePath -Raw
+    Write-Host "文件内容:`n$content"
+    
+    # 使用正则提取版本号（匹配 version = "xxx" 或 version="xxx"）
+    if ($content -match 'version\s*=\s*"([^"]+)"') {
+        $raw_version = $matches[1].Trim()
+        Write-Host "原始版本号: $raw_version"
+    }
+    else {
+        Write-Error "无法从文件中提取版本号"
+        exit 1
+    }
+    
+    # 去除可选的 'v' 前缀
+    $SFTPGO_VERSION = $raw_version -replace '^v', ''
+    Write-Host "清理后版本号: $SFTPGO_VERSION"
+    
+    # 输出到 GITHUB_OUTPUT（注意 PowerShell 中使用 $env:GITHUB_OUTPUT）
+    echo "SFTPGO_VERSION=$SFTPGO_VERSION" >> $env:GITHUB_OUTPUT
+    echo "GO_VERSION=$env:GO_VERSION" >> $env:GITHUB_OUTPUT
+    
+    # 安全截取提交哈希（防止长度不足）
+    $commit = $env:GITHUB_SHA.Substring(0, [Math]::Min(8, $env:GITHUB_SHA.Length))
+    echo "COMMIT=$commit" >> $env:GITHUB_OUTPUT
+    
+    Write-Host "完成！SFTPGO_VERSION=$SFTPGO_VERSION, COMMIT=$commit"
+  shell: pwsh
+  env:
+    GO_VERSION: ${{ env.GO_VERSION }}
 
       - name: Build
         run: |
