@@ -24,51 +24,21 @@ jobs:
       - name: Get SFTPGo version
         id: get_version
         run: |
-          # 定义文件路径（PowerShell 支持正斜杠）
-          $filePath = "internal/version/version.go"
-
-          # 检查文件是否存在
-          if (-not (Test-Path $filePath)) {
-              Write-Error "文件 $filePath 不存在"
-              exit 1
-          }
-
-          # 读取整个文件
-          $content = Get-Content -Path $filePath -Raw
-          Write-Host "文件内容:`n$content"
-
-          # 使用正则提取版本号（匹配 version = "xxx" 或 version="xxx"）
+          $content = Get-Content -Path internal\version\version.go -Raw
           if ($content -match 'version\s*=\s*"([^"]+)"') {
-              $raw_version = $matches[1].Trim()
-              Write-Host "原始版本号: $raw_version"
+              $SFTPGO_VERSION = $matches[1]
           }
-          else {
-              Write-Error "无法从文件中提取版本号"
-              exit 1
-          }
-
-          # 去除可选的 'v' 前缀
-          $SFTPGO_VERSION = $raw_version -replace '^v', ''
-          Write-Host "清理后版本号: $SFTPGO_VERSION"
-
-          # 输出到 GITHUB_OUTPUT（注意 PowerShell 中使用 $env:GITHUB_OUTPUT）
           echo "SFTPGO_VERSION=$SFTPGO_VERSION" >> $env:GITHUB_OUTPUT
           echo "GO_VERSION=$env:GO_VERSION" >> $env:GITHUB_OUTPUT
-
-          # 安全截取提交哈希（防止长度不足）
-          $commit = $env:GITHUB_SHA.Substring(0, [Math]::Min(8, $env:GITHUB_SHA.Length))
+          $commit = $env:GITHUB_SHA.Substring(0,8)
           echo "COMMIT=$commit" >> $env:GITHUB_OUTPUT
-
-          Write-Host "完成！SFTPGO_VERSION=$SFTPGO_VERSION, COMMIT=$commit"
         shell: pwsh
-        env:
-          GO_VERSION: ${{ env.GO_VERSION }}
 
       - name: Build
         run: |
           $GIT_COMMIT = (git describe --always --abbrev=8 --dirty) | Out-String
           $DATE_TIME = ([datetime]::Now.ToUniversalTime().toString("yyyy-MM-ddTHH:mm:ssZ")) | Out-String
-          $FILE_VERSION = $Env:SFTPGO_VERSION.substring(1)  + ".0"
+          $FILE_VERSION = $Env:SFTPGO_VERSION + ".0"
           go install github.com/tc-hib/go-winres@latest
           go-winres simply --arch amd64 --product-version $Env:SFTPGO_VERSION-$GIT_COMMIT --file-version "$FILE_VERSION" --file-description "SFTPGo server" --product-name SFTPGo --copyright "2019-2025 Nicola Murino" --original-filename sftpgo.exe --icon  .\windows-installer\icon.ico
           go build -trimpath -tags nopgxregisterdefaulttypes,disable_grpc_modules -ldflags "-s -w -X github.com/drakkan/sftpgo/v2/internal/version.commit=$GIT_COMMIT -X github.com/drakkan/sftpgo/v2/internal/version.date=$DATE_TIME" -o sftpgo.exe
