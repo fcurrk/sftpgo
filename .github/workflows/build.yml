@@ -23,11 +23,12 @@ jobs:
 
       - name: Get SFTPGo version
         id: get_version
+        shell: pwsh  # 使用 PowerShell Core（windows-2022 已内置）
         run: |
-          SFTPGO_VERSION=$(awk -F '"' '/version =/ {print $2}' internal/version/version.go)
-          echo "SFTPGO_VERSION=${SFTPGO_VERSION}" >> $GITHUB_OUTPUT
-          echo "GO_VERSION=${GO_VERSION}" >> $GITHUB_OUTPUT
-          echo "COMMIT=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+          $version = Get-Content -Path .\VERSION.txt -TotalCount 1
+          $version = $version.Trim()
+          Write-Output "VERSION=$version" >> $env:GITHUB_OUTPUT
+          Write-Output "VERSION_NO_V=$($version -replace '^v', '')" >> $env:GITHUB_OUTPUT
 
       - name: Build
         run: |
