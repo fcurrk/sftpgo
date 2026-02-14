@@ -23,12 +23,14 @@ jobs:
 
       - name: Get SFTPGo version
         id: get_version
-        shell: pwsh  # 使用 PowerShell Core（windows-2022 已内置）
         run: |
-          $version = Get-Content -Path .\VERSION.txt -TotalCount 1
-          $version = $version.Trim()
-          Write-Output "VERSION=$version" >> $env:GITHUB_OUTPUT
-          Write-Output "VERSION_NO_V=$($version -replace '^v', '')" >> $env:GITHUB_OUTPUT
+          SFTPGO_VERSION=$(awk -F '"' '/version =/ {print $2}' internal/version/version.go)
+          echo "SFTPGO_VERSION=${SFTPGO_VERSION}" >> $GITHUB_OUTPUT
+          echo "GO_VERSION=${GO_VERSION}" >> $GITHUB_OUTPUT
+          echo "COMMIT=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+        shell: bash
+        env:
+          GO_VERSION: ${{ env.GO_VERSION }}
 
       - name: Build
         run: |
@@ -178,7 +180,7 @@ jobs:
       - name: Get versions
         id: get_version
         run: |
-          SFTPGO_VERSION=$(head -1 VERSION.txt | tr -d '\r\n')
+          SFTPGO_VERSION=$(awk -F '"' '/version =/ {print $2}' internal/version/version.go)
           echo "SFTPGO_VERSION=${SFTPGO_VERSION}" >> $GITHUB_OUTPUT
           echo "GO_VERSION=${GO_VERSION}" >> $GITHUB_OUTPUT
           echo "COMMIT=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
@@ -316,9 +318,13 @@ jobs:
       - name: Get versions
         id: get_version
         run: |
-          SFTPGO_VERSION=$(head -1 VERSION.txt | tr -d '\r\n')
+          SFTPGO_VERSION=$(awk -F '"' '/version =/ {print $2}' internal/version/version.go)
           echo "SFTPGO_VERSION=${SFTPGO_VERSION}" >> $GITHUB_OUTPUT
+          echo "GO_VERSION=${GO_VERSION}" >> $GITHUB_OUTPUT
+          echo "COMMIT=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
         shell: bash
+        env:
+          GO_VERSION: ${{ env.GO_VERSION }}
 
       - name: Download amd64 artifact
         uses: actions/download-artifact@v7
@@ -348,8 +354,8 @@ jobs:
           tar xvf ../sftpgo_${SFTPGO_VERSION}_linux_x86_64.tar.xz
           cd arm64
           tar xvf ../../sftpgo_${SFTPGO_VERSION}_linux_arm64.tar.xz sftpgo
-          cd ../ppc64le
-          tar xvf ../../sftpgo_${SFTPGO_VERSION}_linux_ppc64le.tar.xz sftpgo
+#          cd ../ppc64le
+#          tar xvf ../../sftpgo_${SFTPGO_VERSION}_linux_ppc64le.tar.xz sftpgo
           cd ../armv7
           tar xvf ../../sftpgo_${SFTPGO_VERSION}_linux_armv7.tar.xz sftpgo
           cd ..
