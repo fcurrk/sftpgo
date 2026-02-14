@@ -24,15 +24,21 @@ jobs:
       - name: Get SFTPGo version
         id: get_version
         run: |
-          $content = Get-Content -Path internal\version\version.go -Raw
+          $filePath = "internal/version/version.go"
+          $content = Get-Content -Path $filePath -Raw
           if ($content -match 'version\s*=\s*"([^"]+)"') {
-              $SFTPGO_VERSION = $matches[1]
+              $raw_version = $matches[1].Trim()
+              Write-Host "原始版本号: $raw_version"
           }
+          $SFTPGO_VERSION = $raw_version -replace '^v', ''
           echo "SFTPGO_VERSION=$SFTPGO_VERSION" >> $env:GITHUB_OUTPUT
           echo "GO_VERSION=$env:GO_VERSION" >> $env:GITHUB_OUTPUT
-          $commit = $env:GITHUB_SHA.Substring(0,8)
+
+          $commit = $env:GITHUB_SHA.Substring(0, [Math]::Min(8, $env:GITHUB_SHA.Length))
           echo "COMMIT=$commit" >> $env:GITHUB_OUTPUT
         shell: pwsh
+        env:
+          GO_VERSION: ${{ env.GO_VERSION }}
 
       - name: Build
         run: |
