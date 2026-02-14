@@ -29,7 +29,7 @@ jobs:
           if ($content -match 'version\s*=\s*"([^"]+)"') {
               $SFTPGO_VERSION = $matches[1].Trim()
           }
-          echo "SFTPGO_VERSION=$SFTPGO_VERSION" >> $env:GITHUB_OUTPUT
+          echo "VERSION=$SFTPGO_VERSION" >> $env:GITHUB_OUTPUT
           echo "GO_VERSION=$env:GO_VERSION" >> $env:GITHUB_OUTPUT
           $commit = $env:GITHUB_SHA.Substring(0, [Math]::Min(8, $env:GITHUB_SHA.Length))
           echo "COMMIT=$commit" >> $env:GITHUB_OUTPUT
@@ -61,7 +61,7 @@ jobs:
           Remove-Item Env:\GOOS
           Remove-Item Env:\GOARCH
         env:
-          SFTPGO_VERSION: ${{ steps.get_version.outputs.SFTPGO_VERSION }}
+          SFTPGO_VERSION: ${{ steps.get_version.outputs.VERSION }}
 
       - name: Initialize data provider
         run: ./sftpgo initprovider
