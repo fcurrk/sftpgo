@@ -13,7 +13,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go: ['1.25']
+        go: ['1.26']
         os: [ubuntu-latest, macos-latest]
 
     steps:
@@ -91,7 +91,7 @@ jobs:
 
       - name: Upload build artifact
         if: startsWith(matrix.os, 'ubuntu-') != true
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: sftpgo-${{ matrix.os }}-go-${{ matrix.go }}
           path: output
@@ -108,7 +108,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       - name: Run test cases using SQLite provider
         run: |
@@ -214,21 +214,21 @@ jobs:
 
       - name: Upload Windows installer x86_64 artifact
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: sftpgo_windows_installer_x86_64
           path: ./sftpgo_windows_x86_64.exe
 
       - name: Upload Windows installer arm64 artifact
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: sftpgo_windows_installer_arm64
           path: ./sftpgo_windows_arm64.exe
 
       - name: Upload Windows installer x86 artifact
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: sftpgo_windows_installer_x86
           path: ./sftpgo_windows_x86.exe
@@ -252,7 +252,7 @@ jobs:
           xcopy .\openapi .\output\openapi\ /E
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: sftpgo-windows-portable
           path: output
@@ -267,7 +267,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       - name: Build
         run: |
@@ -331,7 +331,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       - name: Build
         run: |
@@ -519,7 +519,7 @@ jobs:
             cp sftpgo output/
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: sftpgo-linux-${{ matrix.arch }}-go-${{ matrix.go }}
           path: output
@@ -534,13 +534,13 @@ jobs:
           echo "pkg-version=${PKG_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Upload Debian Package
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-${{ matrix.go-arch }}-deb
           path: pkgs/dist/deb/*
 
       - name: Upload RPM Package
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-${{ matrix.go-arch }}-rpm
           path: pkgs/dist/rpm/*
@@ -552,7 +552,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.26'
       - uses: actions/checkout@v6
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
