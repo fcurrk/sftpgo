@@ -194,7 +194,8 @@ type clientProfilePage struct {
 
 type changeClientPasswordPage struct {
 	baseClientPage
-	Error *util.I18nError
+	Error          *util.I18nError
+	RequiredAction *util.I18nError
 }
 
 type clientMFAPage struct {
@@ -207,6 +208,7 @@ type clientMFAPage struct {
 	RecCodesURL       string
 	Protocols         []string
 	RequiredProtocols []string
+	RequiredAction    *util.I18nError
 }
 
 type clientSharesPage struct {
@@ -692,6 +694,23 @@ func (s *httpdServer) renderClientMFAPage(w http.ResponseWriter, r *http.Request
 	}
 	data.TOTPConfig = user.Filters.TOTPConfig
 	data.RequiredProtocols = user.Filters.TwoFactorAuthProtocols
+	if claims, claimsErr := jwt.FromContext(r.Context()); claimsErr == nil && claims.MustSetTwoFactorAuth {
+		if len(claims.RequiredTwoFactorProtocols) > 0 {
+			protocols := strings.Join(claims.RequiredTwoFactorProtocols, ", ")
+			data.RequiredAction = util.NewI18nError(
+				util.NewGenericError("Two-factor authentication setup required"),
+				util.I18nError2FARequired,
+				util.I18nErrorArgs(map[string]any{
+					"val": protocols,
+				}),
+			)
+		} else {
+			data.RequiredAction = util.NewI18nError(
+				util.NewGenericError("Two-factor authentication setup required"),
+				util.I18nError2FARequiredGeneric,
+			)
+		}
+	}
 	renderClientTemplate(w, templateClientMFA, data)
 }
 
@@ -875,7 +894,12 @@ func (s *httpdServer) renderClientChangePasswordPage(w http.ResponseWriter, r *h
 		baseClientPage: s.getBaseClientPageData(util.I18nChangePwdTitle, webChangeClientPwdPath, w, r),
 		Error:          err,
 	}
-
+	if claims, claimsErr := jwt.FromContext(r.Context()); claimsErr == nil && claims.MustChangePassword {
+		data.RequiredAction = util.NewI18nError(
+			util.NewGenericError("Password change required"),
+			util.I18nErrorChangePwdRequired,
+		)
+	}
 	renderClientTemplate(w, templateChangePwd, data)
 }
 
@@ -974,7 +998,10 @@ func (s *httpdServer) handleClientSharePartialDownload(w http.ResponseWriter, r 
 		return
 	}
 
-	dataprovider.UpdateShareLastUse(&share, 1) //nolint:errcheck
+	if err := dataprovider.UpdateShareLastUse(&share, 1); err != nil {
+		s.renderClientMessagePage(w, r, util.I18nShareAccessErrorTitle, getRespStatus(err), err, "")
+		return
+	}
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"",
 		getCompressedFileName(fmt.Sprintf("share-%s", share.Name), filesList)))
 	renderCompressedFiles(w, connection, name, filesList, &share)
@@ -1102,7 +1129,10 @@ func (s *httpdServer) handleShareGetFiles(w http.ResponseWriter, r *http.Request
 		s.renderSharedFilesPage(w, r, share.GetRelativePath(name), nil, share)
 		return
 	}
-	dataprovider.UpdateShareLastUse(&share, 1) //nolint:errcheck
+	if err := dataprovider.UpdateShareLastUse(&share, 1); err != nil {
+		s.renderClientMessagePage(w, r, util.I18nShareAccessErrorTitle, getRespStatus(err), err, "")
+		return
+	}
 	if status, err := downloadFile(w, r, connection, name, info, false, &share); err != nil {
 		dataprovider.UpdateShareLastUse(&share, -1) //nolint:errcheck
 		if status > 0 {
@@ -1170,7 +1200,10 @@ func (s *httpdServer) handleShareGetPDF(w http.ResponseWriter, r *http.Request) 
 	if err := s.ensurePDF(w, r, name, connection); err != nil {
 		return
 	}
-	dataprovider.UpdateShareLastUse(&share, 1) //nolint:errcheck
+	if err := dataprovider.UpdateShareLastUse(&share, 1); err != nil {
+		s.renderClientMessagePage(w, r, util.I18nShareAccessErrorTitle, getRespStatus(err), err, "")
+		return
+	}
 	if _, err := downloadFile(w, r, connection, name, info, true, &share); err != nil {
 		dataprovider.UpdateShareLastUse(&share, -1) //nolint:errcheck
 	}
@@ -1912,6 +1945,7 @@ func (s *httpdServer) handleClientShareLoginPost(w http.ResponseWriter, r *http.
 	}
 	match, err := share.CheckCredentials(strings.TrimSpace(r.Form.Get("share_password")))
 	if !match || err != nil {
+		handleDefenderEventLoginFailed(ipAddr, dataprovider.ErrInvalidCredentials) //nolint:errcheck
 		s.renderShareLoginPage(w, r, util.NewI18nError(dataprovider.ErrInvalidCredentials, util.I18nErrorInvalidCredentials))
 		return
 	}

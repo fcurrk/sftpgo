@@ -3372,6 +3372,25 @@ func TestResetCodesCleanup(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestResetCodeExpiredGet(t *testing.T) {
+	mgr := &memoryResetCodeManager{}
+	rc := newResetCode(util.GenerateUniqueID(), false)
+	err := mgr.Add(rc)
+	assert.NoError(t, err)
+	// valid code is returned
+	result, err := mgr.Get(rc.Code)
+	assert.NoError(t, err)
+	assert.Equal(t, rc.Code, result.Code)
+	// expire the code
+	rc.ExpiresAt = time.Now().Add(-1 * time.Minute).UTC()
+	// expired code must not be returned
+	_, err = mgr.Get(rc.Code)
+	assert.Error(t, err)
+	// the expired code must be eagerly removed from the store
+	_, loaded := mgr.resetCodes.Load(rc.Code)
+	assert.False(t, loaded)
+}
+
 func TestUserCanResetPassword(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, webClientLoginPath, nil)
 	assert.NoError(t, err)
@@ -3780,13 +3799,13 @@ func TestEventsCSV(t *testing.T) {
 		Status: 1,
 	}
 	data := e.getCSVData()
-	assert.Equal(t, "OK", data[5])
+	assert.Equal(t, "OK", data[6])
 	e.Status = 2
 	data = e.getCSVData()
-	assert.Equal(t, "KO", data[5])
+	assert.Equal(t, "KO", data[6])
 	e.Status = 3
 	data = e.getCSVData()
-	assert.Equal(t, "Quota exceeded", data[5])
+	assert.Equal(t, "Quota exceeded", data[6])
 }
 
 func TestConfigsFromProvider(t *testing.T) {
@@ -4370,5 +4389,115 @@ func isSharedProviderSupported() bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func TestSlicesEqual(t *testing.T) {
+	tests := []struct {
+		name string
+		s1   []string
+		s2   []string
+		want bool
+	}{
+		{
+			name: "same order",
+			s1:   []string{"read", "write"},
+			s2:   []string{"read", "write"},
+			want: true,
+		},
+		{
+			name: "different order",
+			s1:   []string{"read", "write"},
+			s2:   []string{"write", "read"},
+			want: true,
+		},
+		{
+			name: "different lengths",
+			s1:   []string{"read"},
+			s2:   []string{"read", "write"},
+			want: false,
+		},
+		{
+			name: "same length different values",
+			s1:   []string{"read", "write"},
+			s2:   []string{"read", "delete"},
+			want: false,
+		},
+		{
+			name: "same length different multiplicity",
+			s1:   []string{"read", "write"},
+			s2:   []string{"read", "read"},
+			want: false,
+		},
+		{
+			name: "same multiplicity",
+			s1:   []string{"read", "read", "write"},
+			s2:   []string{"write", "read", "read"},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := util.SlicesEqual(tt.s1, tt.s2); got != tt.want {
+				t.Fatalf("SlicesEqual(%v, %v) = %v, want %v", tt.s1, tt.s2, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEventsCSVFormulaInjection(t *testing.T) {
+	const payload = `=HYPERLINK("http://attacker.example","open")`
+	const safe = "regular-name"
+
+	hasNeutralizedFormula := func(row []string) bool {
+		for _, c := range row {
+			if strings.HasPrefix(c, "'=") {
+				return true
+			}
+		}
+		return false
+	}
+	assertNoRawFormula := func(row []string) {
+		for _, c := range row {
+			if c == "" {
+				continue
+			}
+			switch c[0] {
+			case '=', '+', '-', '@', '\t', '\r':
+				t.Errorf("raw formula-triggering cell in exported row: %q", c)
+			}
+		}
+	}
+
+	fsRow := (&fsEvent{
+		Timestamp: time.Now().UnixNano(), Action: "upload",
+		Username: payload, VirtualPath: "/" + payload, FsPath: "/srv/" + payload,
+		SSHCmd: payload, Protocol: "SFTP", IP: "127.0.0.1", Role: payload,
+	}).getCSVData()
+	assert.True(t, hasNeutralizedFormula(fsRow), "fsEvent: %v", fsRow)
+	assertNoRawFormula(fsRow)
+
+	peRow := (&providerEvent{
+		Timestamp: time.Now().UnixNano(), Action: "add", ObjectType: "user",
+		ObjectName: payload, Username: payload, IP: "127.0.0.1", Role: payload,
+	}).getCSVData()
+	assert.True(t, hasNeutralizedFormula(peRow), "providerEvent: %v", peRow)
+	assertNoRawFormula(peRow)
+
+	leRow := (&logEvent{
+		Timestamp: time.Now().UnixNano(), Event: 1, Protocol: "SFTP",
+		Username: payload, IP: "127.0.0.1", Message: payload, Role: payload,
+	}).getCSVData()
+	assert.True(t, hasNeutralizedFormula(leRow), "logEvent: %v", leRow)
+	assertNoRawFormula(leRow)
+
+	// benign values and server-controlled columns must be left untouched
+	benign := (&providerEvent{
+		Timestamp: time.Now().UnixNano(), Action: "add", ObjectType: "user",
+		ObjectName: safe, Username: safe, IP: "127.0.0.1", Role: safe,
+	}).getCSVData()
+	for _, c := range benign {
+		assert.False(t, strings.HasPrefix(c, "'"), "benign cell must not be modified: %q", c)
 	}
 }

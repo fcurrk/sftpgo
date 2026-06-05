@@ -44,7 +44,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -132,6 +131,29 @@ var bytesSizeTable = map[string]uint64{
 	"e":  eByte,
 }
 
+// sanitizeCSVField neutralizes leading characters that spreadsheet
+// applications interpret as the start of a formula, mitigating CSV
+// formula injection when exporting user-controlled data.
+func sanitizeCSVField(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + s
+	}
+	return s
+}
+
+// SanitizeCSVRow neutralizes spreadsheet formula triggers in each value of
+// row, in place, and returns it for convenience.
+func SanitizeCSVRow(row []string) []string {
+	for i := range row {
+		row[i] = sanitizeCSVField(row[i])
+	}
+	return row
+}
+
 // IsStringPrefixInSlice searches a string prefix in a slice and returns true
 // if a matching prefix is found
 func IsStringPrefixInSlice(obj string, list []string) bool {
@@ -164,6 +186,11 @@ func RemoveDuplicates(obj []string, trim bool) []string {
 }
 
 // IsNameValid validates that a name/username contains only safe characters.
+// Since names can be used within filesystem paths, only a restricted character
+// set is permitted. Unicode control (Cc), format (Cf) and line/paragraph
+// separator (Zl/Zp) characters, including zero-width, bidirectional and
+// newline-like codepoints, are rejected to prevent invisible, visually
+// confusable names and log injection.
 func IsNameValid(name string) bool {
 	if name == "" {
 		return false
@@ -172,7 +199,7 @@ func IsNameValid(name string) bool {
 		return false
 	}
 	for _, r := range name {
-		if unicode.IsControl(r) {
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp) {
 			return false
 		}
 
@@ -960,14 +987,33 @@ func ReadConfigFromFile(name, configDir string) (string, error) {
 	return strings.TrimSpace(BytesToString(val)), nil
 }
 
+// ResolveConfigValue returns the content of the file at filePath if filePath
+// is non-empty, otherwise it returns value unchanged. This is typically used
+// to allow sensitive configuration values (passwords, secrets) to be loaded
+// from a file (e.g. a Docker/Kubernetes secret mount) instead of being
+// provided inline.
+func ResolveConfigValue(value, filePath, configDir string) (string, error) {
+	if filePath == "" {
+		return value, nil
+	}
+	return ReadConfigFromFile(filePath, configDir)
+}
+
 // SlicesEqual checks if the provided slices contain the same elements,
 // also in different order.
 func SlicesEqual(s1, s2 []string) bool {
 	if len(s1) != len(s2) {
 		return false
 	}
+
+	counts := make(map[string]int)
 	for _, v := range s1 {
-		if !slices.Contains(s2, v) {
+		counts[v]++
+	}
+
+	for _, v := range s2 {
+		counts[v]--
+		if counts[v] < 0 {
 			return false
 		}
 	}

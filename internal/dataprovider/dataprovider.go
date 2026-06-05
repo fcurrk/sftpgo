@@ -186,7 +186,10 @@ var (
 	// ErrDuplicatedKey occurs when there is a unique key constraint violation
 	ErrDuplicatedKey = errors.New("duplicated key not allowed")
 	// ErrForeignKeyViolated occurs when there is a foreign key constraint violation
-	ErrForeignKeyViolated   = errors.New("violates foreign key constraint")
+	ErrForeignKeyViolated = errors.New("violates foreign key constraint")
+	// ErrShareUsageExceeded is returned when reserving share usage tokens would exceed the share max_tokens limit
+	ErrShareUsageExceeded = util.NewI18nError(
+		util.NewRecordNotFoundError("max share usage exceeded"), util.I18nErrorShareUsage)
 	errInvalidInput         = util.NewValidationError("Invalid input. Slashes (/ ), colons (:), control characters, and reserved system names are not allowed")
 	tz                      = ""
 	isAdminCreated          atomic.Bool
@@ -373,6 +376,10 @@ type Config struct {
 	Username string `json:"username" mapstructure:"username"`
 	// Database password
 	Password string `json:"password" mapstructure:"password"`
+	// Path to a file containing the database password. If set, the password is
+	// read from this file at startup, overriding the Password field. The path
+	// can be absolute or relative to the configuration directory.
+	PasswordFile string `json:"password_file" mapstructure:"password_file"`
 	// Used for drivers mysql and postgresql.
 	// 0 disable SSL/TLS connections.
 	// 1 require ssl.
@@ -919,6 +926,11 @@ func Initialize(cnf Config, basePath string, checkAdmins bool) error {
 	if err := validateHooks(); err != nil {
 		return err
 	}
+	password, err := util.ResolveConfigValue(cnf.Password, cnf.PasswordFile, basePath)
+	if err != nil {
+		return fmt.Errorf("unable to read password from file %q: %w", cnf.PasswordFile, err)
+	}
+	config.Password = password
 	if err := createProvider(basePath); err != nil {
 		return err
 	}
@@ -1464,7 +1476,11 @@ func CleanupDefender(from int64) error {
 	return provider.cleanupDefender(from)
 }
 
-// UpdateShareLastUse updates the LastUseAt and UsedTokens for the given share
+// UpdateShareLastUse updates the LastUseAt and UsedTokens for the given share.
+// When numTokens is positive the usage is reserved atomically: if max_tokens is
+// set and the reservation would exceed it the share is left unchanged and
+// ErrShareUsageExceeded is returned. A non-positive numTokens refunds previously
+// reserved tokens and is always applied.
 func UpdateShareLastUse(share *Share, numTokens int) error {
 	return provider.updateShareLastUse(share.ShareID, numTokens)
 }
@@ -4045,6 +4061,9 @@ func executeKeyboardInteractiveProgram(user *User, authHook string, client ssh.K
 				once.Do(func() { terminateInteractiveAuthProgram(cmd, false) })
 			}
 		}()
+	}
+	if err := scanner.Err(); err != nil {
+		once.Do(func() { terminateInteractiveAuthProgram(cmd, false) })
 	}
 	stdin.Close()
 	once.Do(func() { terminateInteractiveAuthProgram(cmd, true) })

@@ -129,6 +129,9 @@ func init() {
 	Connections.transfers = clientsMap{
 		clients: make(map[string]int),
 	}
+	Connections.transfersPerIP = clientsMap{
+		clients: make(map[string]int),
+	}
 	Connections.perUserConns = make(map[string]int)
 	Connections.mapping = make(map[string]int)
 	Connections.sshMapping = make(map[string]int)
@@ -249,6 +252,7 @@ func Initialize(c Configuration, isShared int) error {
 	vfs.SetRenameMode(c.RenameMode)
 	vfs.SetReadMetadataMode(c.Metadata.Read)
 	vfs.SetResumeMaxSize(c.ResumeMaxSize)
+	vfs.SetSecretMinEntropy(c.SecretMinEntropy)
 	vfs.SetUploadMode(c.UploadMode)
 	dataprovider.SetAllowSelfConnections(c.AllowSelfConnections)
 	dataprovider.EnabledActionCommands = c.EventManager.EnabledCommands
@@ -585,6 +589,12 @@ type Configuration struct {
 	// the renaming for atomic uploads will become a copy and therefore may take a long time.
 	// The temporary files are not namespaced. The default is generally fine. Leave empty for the default.
 	TempPath string `json:"temp_path" mapstructure:"temp_path"`
+	// SecretMinEntropy defines the minimum entropy required for plain-text
+	// data-encryption secrets: the CryptFs passphrase and the S3 SSE-C key. These
+	// secrets must be random key material rather than a memorable password. The
+	// check runs when the secret is submitted in plain text. Set to 0 to disable.
+	// Default: 80.
+	SecretMinEntropy float64 `json:"secret_min_entropy" mapstructure:"secret_min_entropy"`
 	// Support for HAProxy PROXY protocol.
 	// If you are running SFTPGo behind a proxy server such as HAProxy, AWS ELB or NGNIX, you can enable
 	// the proxy protocol. It provides a convenient way to safely transport connection information
@@ -938,7 +948,9 @@ type ActiveConnections struct {
 	// for authentication
 	clients clientsMap
 	// transfers contains active transfers, total and per-user
-	transfers            clientsMap
+	transfers clientsMap
+	// transfersPerIP contains active transfers per client IP, used to enforce MaxPerHostConnections
+	transfersPerIP       clientsMap
 	transfersCheckStatus atomic.Bool
 	sync.RWMutex
 	connections    []ActiveConnection
@@ -988,9 +1000,6 @@ func (conns *ActiveConnections) Add(c ActiveConnection) error {
 		if maxSessions := c.GetMaxSessions(); maxSessions > 0 {
 			if val := conns.perUserConns[username]; val >= maxSessions {
 				return fmt.Errorf("too many open sessions: %d/%d", val, maxSessions)
-			}
-			if val := conns.transfers.getTotalFrom(username); val >= maxSessions {
-				return fmt.Errorf("too many open transfers: %d/%d", val, maxSessions)
 			}
 		}
 		conns.addUserConnection(username)
@@ -1258,23 +1267,33 @@ func (conns *ActiveConnections) GetTotalTransfers() int32 {
 }
 
 // IsNewTransferAllowed returns an error if the maximum number of concurrent allowed
-// transfers is exceeded
-func (conns *ActiveConnections) IsNewTransferAllowed(username string) error {
+// transfers is exceeded for the client connection, its IP address or the user
+func (conns *ActiveConnections) IsNewTransferAllowed(c *BaseConnection) error {
 	if isShuttingDown.Load() {
 		return ErrShuttingDown
 	}
-	if Config.MaxTotalConnections == 0 && Config.MaxPerHostConnections == 0 {
+	username := c.GetUsername()
+	maxSessions := c.GetMaxSessions()
+	if Config.MaxTotalConnections == 0 && Config.MaxPerHostConnections == 0 && (maxSessions == 0 || username == "") {
 		return nil
 	}
-	if Config.MaxPerHostConnections > 0 {
-		if transfers := conns.transfers.getTotalFrom(username); transfers >= Config.MaxPerHostConnections {
-			logger.Info(logSender, "", "active transfers from user %q: %d/%d", username, transfers, Config.MaxPerHostConnections)
+	if maxSessions > 0 && username != "" {
+		if transfers := conns.transfers.getTotalFrom(username); transfers >= maxSessions {
+			logger.Info(logSender, "", "denying new transfer, active transfers from user %q: %d/%d", username, transfers, maxSessions)
 			return ErrConnectionDenied
+		}
+	}
+	if Config.MaxPerHostConnections > 0 {
+		if ipAddr := c.GetRemoteIP(); ipAddr != "" {
+			if transfers := conns.transfersPerIP.getTotalFrom(ipAddr); transfers >= Config.MaxPerHostConnections {
+				logger.Info(logSender, "", "denying new transfer, active transfers from IP %q: %d/%d", ipAddr, transfers, Config.MaxPerHostConnections)
+				return ErrConnectionDenied
+			}
 		}
 	}
 	if Config.MaxTotalConnections > 0 {
 		if transfers := conns.transfers.getTotal(); transfers >= int32(Config.MaxTotalConnections) {
-			logger.Info(logSender, "", "active transfers %d/%d", transfers, Config.MaxTotalConnections)
+			logger.Info(logSender, "", "denying new transfer, active transfers %d/%d", transfers, Config.MaxTotalConnections)
 			return ErrConnectionDenied
 		}
 	}

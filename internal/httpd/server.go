@@ -1429,7 +1429,7 @@ func (s *httpdServer) setupRESTAPIRoutes() {
 					updateUserQuotaUsage)
 				router.With(s.checkPerms(dataprovider.PermAdminChangeUsers)).Put(quotasBasePath+"/users/{username}/transfer-usage",
 					updateUserTransferQuotaUsage)
-				router.With(s.checkPerms(dataprovider.PermAdminChangeUsers)).Put(quotasBasePath+"/folders/{name}/usage",
+				router.With(s.checkPerms(dataprovider.PermAdminManageFolders)).Put(quotasBasePath+"/folders/{name}/usage",
 					updateFolderQuotaUsage)
 				router.With(s.checkPerms(dataprovider.PermAdminViewDefender)).Get(defenderHosts, getDefenderHosts)
 				router.With(s.checkPerms(dataprovider.PermAdminViewDefender)).Get(defenderHosts+"/{id}", getDefenderHostByID)
@@ -1439,7 +1439,7 @@ func (s *httpdServer) setupRESTAPIRoutes() {
 				router.With(s.checkPerms(dataprovider.PermAdminAny)).Get(adminPath+"/{username}", getAdminByUsername)
 				router.With(s.checkPerms(dataprovider.PermAdminAny)).Put(adminPath+"/{username}", updateAdmin)
 				router.With(s.checkPerms(dataprovider.PermAdminAny)).Delete(adminPath+"/{username}", deleteAdmin)
-				router.With(s.checkPerms(dataprovider.PermAdminDisableMFA)).Put(adminPath+"/{username}/2fa/disable", disableAdmin2FA)
+				router.With(s.checkPerms(dataprovider.PermAdminAny)).Put(adminPath+"/{username}/2fa/disable", disableAdmin2FA)
 				router.With(s.checkPerms(dataprovider.PermAdminAny)).Get(retentionChecksPath, getRetentionChecks)
 				router.With(s.checkPerms(dataprovider.PermAdminViewEvents), compressor.Handler).
 					Get(fsEventsPath, searchFsEvents)
@@ -1812,7 +1812,7 @@ func (s *httpdServer) setupWebAdminRoutes() {
 					s.handleWebUpdateAdminPost)
 				router.With(s.checkPerms(dataprovider.PermAdminAny), s.verifyCSRFHeader).
 					Delete(webAdminPath+"/{username}", deleteAdmin)
-				router.With(s.checkPerms(dataprovider.PermAdminDisableMFA), s.verifyCSRFHeader).
+				router.With(s.checkPerms(dataprovider.PermAdminAny), s.verifyCSRFHeader).
 					Put(webAdminPath+"/{username}/2fa/disable", disableAdmin2FA)
 				router.With(s.checkPerms(dataprovider.PermAdminCloseConnections), s.verifyCSRFHeader).
 					Delete(webConnectionsPath+"/{connectionID}", handleCloseConnection)

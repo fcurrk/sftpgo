@@ -212,6 +212,7 @@ func Init() {
 			SetstatMode:           0,
 			RenameMode:            0,
 			ResumeMaxSize:         0,
+			SecretMinEntropy:      80,
 			TempPath:              "",
 			ProxyProtocol:         0,
 			ProxyAllowed:          []string{},
@@ -341,6 +342,7 @@ func Init() {
 			Port:               0,
 			Username:           "",
 			Password:           "",
+			PasswordFile:       "",
 			ConnectionString:   "",
 			SQLTablesPrefix:    "",
 			SSLMode:            0,
@@ -387,7 +389,7 @@ func Init() {
 			UpdateMode:         0,
 			DelayedQuotaUpdate: 0,
 			CreateDefaultAdmin: false,
-			NamingRules:        1,
+			NamingRules:        5,
 			IsShared:           0,
 			Node: dataprovider.NodeConfig{
 				Host:  "",
@@ -2055,6 +2057,7 @@ func setViperDefaults() {
 	viper.SetDefault("common.setstat_mode", globalConf.Common.SetstatMode)
 	viper.SetDefault("common.rename_mode", globalConf.Common.RenameMode)
 	viper.SetDefault("common.resume_max_size", globalConf.Common.ResumeMaxSize)
+	viper.SetDefault("common.secret_min_entropy", globalConf.Common.SecretMinEntropy)
 	viper.SetDefault("common.temp_path", globalConf.Common.TempPath)
 	viper.SetDefault("common.proxy_protocol", globalConf.Common.ProxyProtocol)
 	viper.SetDefault("common.proxy_allowed", globalConf.Common.ProxyAllowed)
@@ -2148,6 +2151,7 @@ func setViperDefaults() {
 	viper.SetDefault("data_provider.port", globalConf.ProviderConf.Port)
 	viper.SetDefault("data_provider.username", globalConf.ProviderConf.Username)
 	viper.SetDefault("data_provider.password", globalConf.ProviderConf.Password)
+	viper.SetDefault("data_provider.password_file", globalConf.ProviderConf.PasswordFile)
 	viper.SetDefault("data_provider.sslmode", globalConf.ProviderConf.SSLMode)
 	viper.SetDefault("data_provider.disable_sni", globalConf.ProviderConf.DisableSNI)
 	viper.SetDefault("data_provider.target_session_attrs", globalConf.ProviderConf.TargetSessionAttrs)

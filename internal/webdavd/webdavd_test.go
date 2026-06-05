@@ -277,6 +277,7 @@ func TestMain(m *testing.M) {
 	os.Setenv("SFTPGO_DEFAULT_ADMIN_PASSWORD", "password")
 	os.Setenv("SFTPGO_WEBDAVD__CACHE__MIME_TYPES__CUSTOM_MAPPINGS__0__EXT", ".sftpgo")
 	os.Setenv("SFTPGO_WEBDAVD__CACHE__MIME_TYPES__CUSTOM_MAPPINGS__0__MIME", "application/sftpgo")
+	os.Setenv("SFTPGO_COMMON__SECRET_MIN_ENTROPY", "0")
 	err := config.LoadConfig(configDir, "")
 	if err != nil {
 		logger.ErrorToConsole("error loading configuration: %v", err)
@@ -1711,9 +1712,24 @@ func TestMaxTransfers(t *testing.T) {
 	testFileSize := int64(65535)
 	err = createTestFile(testFilePath, testFileSize)
 	assert.NoError(t, err)
-	err = uploadFileWithRawClient(testFilePath, testFileName, user.Username, defaultPassword,
-		false, testFileSize, client)
-	assert.Error(t, err)
+	// upload over 127.0.0.1 so it shares the per-host transfer budget with the
+	// SFTP client; with two active SFTP transfers this upload must be denied
+	srcFile, err := os.Open(testFilePath)
+	assert.NoError(t, err)
+	defer srcFile.Close()
+	uploadReq, err := http.NewRequest(http.MethodPut,
+		fmt.Sprintf("http://127.0.0.1:%d/%s", webDavServerPort, testFileName), srcFile)
+	assert.NoError(t, err)
+	uploadReq.SetBasicAuth(user.Username, defaultPassword)
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	defer httpClient.CloseIdleConnections()
+	resp, err := httpClient.Do(uploadReq)
+	assert.NoError(t, err)
+	if assert.NotNil(t, resp) {
+		assert.NotEqual(t, http.StatusCreated, resp.StatusCode)
+		err = resp.Body.Close()
+		assert.NoError(t, err)
+	}
 
 	err = os.Remove(testFilePath)
 	assert.NoError(t, err)

@@ -206,8 +206,7 @@ func getUserFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	inline := r.URL.Query().Get("inline") != ""
-	if status, err := downloadFile(w, r, connection, name, info, inline, nil); err != nil {
+	if status, err := downloadFile(w, r, connection, name, info, false, nil); err != nil {
 		resp := apiResponse{
 			Error:   err.Error(),
 			Message: http.StatusText(status),
@@ -315,7 +314,7 @@ func uploadUserFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	defer common.Connections.Remove(connection.GetID())
 
-	if err := common.Connections.IsNewTransferAllowed(connection.User.Username); err != nil {
+	if err := common.Connections.IsNewTransferAllowed(connection.BaseConnection); err != nil {
 		connection.Log(logger.LevelInfo, "denying file write due to number of transfer limits")
 		sendAPIResponse(w, r, err, "Denying file write due to transfer count limits",
 			http.StatusConflict)
@@ -330,15 +329,10 @@ func uploadUserFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t := newThrottledReader(r.Body, connection.User.UploadBandwidth, connection)
-	r.Body = t
-	err = r.ParseMultipartForm(maxMultipartMem)
-	if err != nil {
-		connection.RemoveTransfer(t)
+	if err = parseUploadMultipartForm(connection, r); err != nil {
 		sendAPIResponse(w, r, err, "Unable to parse multipart form", http.StatusBadRequest)
 		return
 	}
-	connection.RemoveTransfer(t)
 	defer r.MultipartForm.RemoveAll() //nolint:errcheck
 
 	parentDir := connection.User.GetCleanedPath(r.URL.Query().Get("path"))
