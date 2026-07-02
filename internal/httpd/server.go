@@ -182,8 +182,8 @@ func (s *httpdServer) renderClientLoginPage(w http.ResponseWriter, r *http.Reque
 		FormDisabled:   s.binding.isWebClientLoginFormDisabled(),
 		CheckRedirect:  true,
 	}
-	if next := r.URL.Query().Get("next"); strings.HasPrefix(next, webClientFilesPath) {
-		data.CurrentURL += "?next=" + url.QueryEscape(next)
+	if target, ok := safeRedirectTarget(r.URL.Query().Get("next"), webClientFilesPath); ok {
+		data.CurrentURL += "?next=" + url.QueryEscape(target)
 	}
 	if s.binding.showAdminLoginURL() {
 		data.AltLoginURL = webAdminLoginPath
@@ -194,6 +194,9 @@ func (s *httpdServer) renderClientLoginPage(w http.ResponseWriter, r *http.Reque
 	}
 	if s.binding.OIDC.isEnabled() && !s.binding.isWebClientOIDCLoginDisabled() {
 		data.OpenIDLoginURL = webClientOIDCLoginPath
+		if target, ok := safeRedirectTarget(r.URL.Query().Get("next"), webClientFilesPath); ok {
+			data.OpenIDLoginURL += "?next=" + url.QueryEscape(target)
+		}
 	}
 	renderClientTemplate(w, templateCommonLogin, data)
 }
@@ -257,6 +260,7 @@ func (s *httpdServer) handleWebClientLoginPost(w http.ResponseWriter, r *http.Re
 		updateLoginMetrics(&dataprovider.User{BaseUser: sdk.BaseUser{Username: username}},
 			dataprovider.LoginMethodPassword, ipAddr, err, r)
 		s.renderClientLoginPage(w, r, util.NewI18nError(err, util.I18nErrorInvalidCSRF))
+		return
 	}
 
 	if err := common.Config.ExecutePostConnectHook(ipAddr, protocol); err != nil {
@@ -764,16 +768,16 @@ func (s *httpdServer) loginUser(
 	invalidateToken(r)
 	if audience == tokenAudienceWebClientPartial {
 		redirectPath := webClientTwoFactorPath
-		if next := r.URL.Query().Get("next"); strings.HasPrefix(next, webClientFilesPath) {
-			redirectPath += "?next=" + url.QueryEscape(next)
+		if target, ok := safeRedirectTarget(r.URL.Query().Get("next"), webClientFilesPath); ok {
+			redirectPath += "?next=" + url.QueryEscape(target)
 		}
 		http.Redirect(w, r, redirectPath, http.StatusFound)
 		return
 	}
 	updateLoginMetrics(user, dataprovider.LoginMethodPassword, ipAddr, err, r)
 	dataprovider.UpdateLastLogin(user)
-	if next := r.URL.Query().Get("next"); strings.HasPrefix(next, webClientFilesPath) {
-		http.Redirect(w, r, next, http.StatusFound)
+	if target, ok := safeRedirectTarget(r.URL.Query().Get("next"), webClientFilesPath); ok {
+		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
 	http.Redirect(w, r, webClientFilesPath, http.StatusFound)

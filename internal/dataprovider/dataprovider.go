@@ -621,6 +621,11 @@ func ConvertName(name string) string {
 	return config.convertName(name)
 }
 
+// IsSharedMode returns true if the data provider is configured as shared (cluster mode).
+func IsSharedMode() bool {
+	return config.IsShared == 1
+}
+
 // ActiveTransfer defines an active protocol transfer
 type ActiveTransfer struct {
 	ID            int64
@@ -3345,7 +3350,7 @@ func hashPlainPassword(plainPwd string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("bcrypt hashing error: %w", err)
 		}
-		return util.BytesToString(pwd), nil
+		return string(pwd), nil
 	}
 	pwd, err := argon2id.CreateHash(plainPwd, argon2Params)
 	if err != nil {
