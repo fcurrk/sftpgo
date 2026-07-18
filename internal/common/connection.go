@@ -366,17 +366,17 @@ func (c *BaseConnection) CheckParentDirs(virtualPath string) error {
 		return err
 	}
 	dirs := util.GetDirsForVirtualPath(virtualPath)
-	for idx := len(dirs) - 1; idx >= 0; idx-- {
-		fs, err = c.User.GetFilesystemForPath(dirs[idx], c.GetID())
+	for _, dir := range slices.Backward(dirs) {
+		fs, err = c.User.GetFilesystemForPath(dir, c.GetID())
 		if err != nil {
 			return err
 		}
 		if fs.HasVirtualFolders() {
 			continue
 		}
-		if err = c.createDirIfMissing(dirs[idx]); err != nil {
+		if err = c.createDirIfMissing(dir); err != nil {
 			return fmt.Errorf("unable to check/create missing parent dir %q for virtual path %q: %w",
-				dirs[idx], virtualPath, err)
+				dir, virtualPath, err)
 		}
 	}
 	return nil
@@ -837,7 +837,7 @@ func (c *BaseConnection) renameInternal(virtualSourcePath, virtualTargetPath str
 	initialSize := int64(-1)
 	dstInfo, err := fsDst.Lstat(fsTargetPath)
 	if err != nil && !fsDst.IsNotExist(err) {
-		return err
+		return c.GetFsError(fsDst, err)
 	}
 	if err == nil {
 		checkParentDestination = false
@@ -872,8 +872,19 @@ func (c *BaseConnection) renameInternal(virtualSourcePath, virtualTargetPath str
 	defer stopKeepAlive()
 
 	files, size, err := fsDst.Rename(fsSourcePath, fsTargetPath, checks)
+	if errors.Is(err, vfs.ErrCrossRename) {
+		// The backend cannot rename as a single operation across two
+		// confinement roots: fall back to a non-atomic copy + delete. Symbolic
+		// links in the moved tree are skipped.
+		files, size, err = vfs.RenameAcrossRoots(fsSrc, fsDst, fsSourcePath, fsTargetPath, srcInfo,
+			checks, c.User.GetUID(), c.User.GetGID())
+	}
 	if err != nil {
 		c.Log(logger.LevelError, "failed to rename %q -> %q: %+v", fsSourcePath, fsTargetPath, err)
+		// Best effort quota update.
+		if files > 0 {
+			c.updateQuotaAfterRename(fsDst, virtualSourcePath, virtualTargetPath, fsTargetPath, initialSize, files, size) //nolint:errcheck
+		}
 		return c.GetFsError(fsSrc, err)
 	}
 	vfs.SetPathPermissions(fsDst, fsTargetPath, c.User.GetUID(), c.User.GetGID())
@@ -1581,7 +1592,7 @@ func (c *BaseConnection) updateQuotaMoveToVFolder(dstFolder *vfs.VirtualFolder, 
 	dataprovider.UpdateUserFolderQuota(dstFolder, &c.User, 0, filesSize-initialSize, false)
 }
 
-func (c *BaseConnection) updateQuotaAfterRename(fs vfs.Fs, virtualSourcePath, virtualTargetPath, targetPath string,
+func (c *BaseConnection) updateQuotaAfterRename(fs vfs.Fs, virtualSourcePath, virtualTargetPath, targetPath string, //nolint:gocyclo
 	initialSize int64, numFiles int, filesSize int64,
 ) error {
 	if dataprovider.GetQuotaTracking() == 0 {
@@ -1603,9 +1614,18 @@ func (c *BaseConnection) updateQuotaAfterRename(fs vfs.Fs, virtualSourcePath, vi
 		}
 		return nil
 	}
+	if errSrc == nil && errDst == nil && sourceFolder.Name == dstFolder.Name {
+		// Move within the same virtual folder, only overwritten files are to update.
+		// Returning here avoids the racy, best-effort, post-rename stat.
+		if initialSize != -1 {
+			dataprovider.UpdateUserFolderQuota(&sourceFolder, &c.User, -1, -initialSize, false)
+		}
+		return nil
+	}
 
 	if filesSize == -1 {
-		// fs.Rename didn't return the affected files/sizes, we need to calculate them
+		// fs.Rename didn't return the affected files/sizes, we need to
+		// calculate them (best effort, may be inaccurate).
 		numFiles = 1
 		if fi, err := fs.Stat(targetPath); err == nil {
 			if fi.Mode().IsDir() {
@@ -1752,8 +1772,7 @@ func (c *BaseConnection) GetGenericError(err error) error {
 			return fmt.Errorf("%w: %w", sftp.ErrSSHFxFailure, err)
 		}
 		if err != nil {
-			var pathError *fs.PathError
-			if errors.As(err, &pathError) {
+			if pathError, ok := errors.AsType[*fs.PathError](err); ok {
 				c.Log(logger.LevelError, "generic path error: %+v", pathError)
 				return fmt.Errorf("%w: %v %v", sftp.ErrSSHFxFailure, pathError.Op, pathError.Err.Error())
 			}

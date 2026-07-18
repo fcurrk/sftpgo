@@ -445,8 +445,7 @@ func (*S3Fs) IsNotExist(err error) bool {
 		return false
 	}
 
-	var re *awshttp.ResponseError
-	if errors.As(err, &re) {
+	if re, ok := errors.AsType[*awshttp.ResponseError](err); ok {
 		if re.Response != nil {
 			return re.Response.StatusCode == http.StatusNotFound
 		}
@@ -461,8 +460,7 @@ func (*S3Fs) IsPermission(err error) bool {
 		return false
 	}
 
-	var re *awshttp.ResponseError
-	if errors.As(err, &re) {
+	if re, ok := errors.AsType[*awshttp.ResponseError](err); ok {
 		if re.Response != nil {
 			return re.Response.StatusCode == http.StatusForbidden ||
 				re.Response.StatusCode == http.StatusUnauthorized
@@ -483,6 +481,8 @@ func (*S3Fs) IsNotSupported(err error) bool {
 func (fs *S3Fs) CheckRootPath(username string, uid int, gid int) bool {
 	// we need a local directory for temporary files
 	osFs := NewOsFs(fs.ConnectionID(), fs.localTempDir, "", nil)
+	defer osFs.Close() //nolint:errcheck
+
 	return osFs.CheckRootPath(username, uid, gid)
 }
 
@@ -745,6 +745,10 @@ func (fs *S3Fs) renameInternal(source, target string, srcInfo os.FileInfo, recur
 	err := fs.Remove(source, srcInfo.IsDir())
 	if fs.IsNotExist(err) {
 		err = nil
+	}
+	if err != nil && !srcInfo.IsDir() {
+		numFiles--
+		filesSize -= srcInfo.Size()
 	}
 	return numFiles, filesSize, err
 }

@@ -214,7 +214,6 @@ func Init() {
 			SymlinkMode:           0,
 			ResumeMaxSize:         0,
 			SecretMinEntropy:      80,
-			TempPath:              "",
 			ProxyProtocol:         0,
 			ProxyAllowed:          []string{},
 			ProxySkipped:          []string{},
@@ -846,7 +845,7 @@ func resetInvalidConfigs() {
 }
 
 func loadBindingsFromEnv() {
-	for idx := 0; idx < 10; idx++ {
+	for idx := range 10 {
 		getTOTPFromEnv(idx)
 		getRateLimitersFromEnv(idx)
 		getPluginsFromEnv(idx)
@@ -1153,7 +1152,7 @@ func getFTPDPassiveIPOverridesFromEnv(idx int) []ftpd.PassiveIPOverride {
 		overrides = globalConf.FTPD.Bindings[idx].PassiveIPOverrides
 	}
 
-	for subIdx := 0; subIdx < 10; subIdx++ {
+	for subIdx := range 10 {
 		var override ftpd.PassiveIPOverride
 		var replace bool
 		if len(globalConf.FTPD.Bindings) > idx && len(globalConf.FTPD.Bindings[idx].PassiveIPOverrides) > subIdx {
@@ -1388,7 +1387,7 @@ func getWebDAVDBindingProxyConfigsFromEnv(idx int, binding *webdavd.Binding) boo
 }
 
 func loadWebDAVCacheMappingsFromEnv() []webdavd.CustomMimeMapping {
-	for idx := 0; idx < 30; idx++ {
+	for idx := range 30 {
 		ext, extOK := os.LookupEnv(fmt.Sprintf("SFTPGO_WEBDAVD__CACHE__MIME_TYPES__CUSTOM_MAPPINGS__%d__EXT", idx))
 		mime, mimeOK := os.LookupEnv(fmt.Sprintf("SFTPGO_WEBDAVD__CACHE__MIME_TYPES__CUSTOM_MAPPINGS__%d__MIME", idx))
 		if extOK && mimeOK {
@@ -1463,7 +1462,7 @@ func getHTTPDSecurityProxyHeadersFromEnv(idx int) []httpd.HTTPSProxyHeader {
 		httpsProxyHeaders = globalConf.HTTPDConfig.Bindings[idx].Security.HTTPSProxyHeaders
 	}
 
-	for subIdx := 0; subIdx < 10; subIdx++ {
+	for subIdx := range 10 {
 		var httpsProxyHeader httpd.HTTPSProxyHeader
 		var replace bool
 		if len(globalConf.HTTPDConfig.Bindings) > idx &&
@@ -2066,7 +2065,6 @@ func setViperDefaults() {
 	viper.SetDefault("common.symlink_mode", globalConf.Common.SymlinkMode)
 	viper.SetDefault("common.resume_max_size", globalConf.Common.ResumeMaxSize)
 	viper.SetDefault("common.secret_min_entropy", globalConf.Common.SecretMinEntropy)
-	viper.SetDefault("common.temp_path", globalConf.Common.TempPath)
 	viper.SetDefault("common.proxy_protocol", globalConf.Common.ProxyProtocol)
 	viper.SetDefault("common.proxy_allowed", globalConf.Common.ProxyAllowed)
 	viper.SetDefault("common.proxy_skipped", globalConf.Common.ProxySkipped)

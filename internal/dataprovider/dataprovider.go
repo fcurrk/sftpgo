@@ -235,7 +235,6 @@ var (
 	argon2Params                 *argon2id.Params
 	lastLoginMinDelay            = 10 * time.Minute
 	usernameRegex                = regexp.MustCompile("^[a-zA-Z0-9-_.~]+$")
-	tempPath                     string
 	allowSelfConnections         int
 	fnReloadRules                FnReloadRules
 	fnRemoveRule                 FnRemoveRule
@@ -683,7 +682,7 @@ type DefenderEntry struct {
 	ID      int64     `json:"-"`
 	IP      string    `json:"ip"`
 	Score   int       `json:"score,omitempty"`
-	BanTime time.Time `json:"ban_time,omitempty"`
+	BanTime time.Time `json:"ban_time"`
 }
 
 // GetID returns an unique ID for a defender entry
@@ -894,11 +893,6 @@ type Provider interface {
 // SetAllowSelfConnections sets the desired behaviour for self connections
 func SetAllowSelfConnections(value int) {
 	allowSelfConnections = value
-}
-
-// SetTempPath sets the path for temporary files
-func SetTempPath(fsPath string) {
-	tempPath = fsPath
 }
 
 func checkSharedMode() {
@@ -2156,6 +2150,7 @@ func AddUser(user *User, executor, ipAddress, role string) error {
 	user.Username = config.convertName(user.Username)
 	err := provider.addUser(user)
 	if err == nil {
+		RemoveCachedWebDAVUser(user.Username)
 		executeAction(operationAdd, executor, ipAddress, actionObjectUser, user.Username, role, user)
 	}
 	return err
@@ -2711,11 +2706,7 @@ func buildUserHomeDir(user *User) {
 		}
 		switch user.FsConfig.Provider {
 		case sdk.SFTPFilesystemProvider, sdk.S3FilesystemProvider, sdk.AzureBlobFilesystemProvider, sdk.GCSFilesystemProvider, sdk.HTTPFilesystemProvider:
-			if tempPath != "" {
-				user.HomeDir = filepath.Join(tempPath, user.Username)
-			} else {
-				user.HomeDir = filepath.Join(os.TempDir(), user.Username)
-			}
+			user.HomeDir = filepath.Join(os.TempDir(), user.Username)
 		}
 	} else {
 		user.HomeDir = filepath.Clean(user.HomeDir)

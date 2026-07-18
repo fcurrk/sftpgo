@@ -37,7 +37,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
@@ -414,13 +413,13 @@ func (fs *AzureBlobFs) Chtimes(name string, _, mtime time.Time, isUploading bool
 	found := false
 	for k := range metadata {
 		if strings.EqualFold(k, lastModifiedField) {
-			metadata[k] = to.Ptr(strconv.FormatInt(mtime.UnixMilli(), 10))
+			metadata[k] = new(strconv.FormatInt(mtime.UnixMilli(), 10))
 			found = true
 			break
 		}
 	}
 	if !found {
-		metadata[lastModifiedField] = to.Ptr(strconv.FormatInt(mtime.UnixMilli(), 10))
+		metadata[lastModifiedField] = new(strconv.FormatInt(mtime.UnixMilli(), 10))
 	}
 
 	ctx, cancelFn := context.WithDeadline(context.Background(), time.Now().Add(fs.ctxTimeout))
@@ -483,8 +482,7 @@ func (*AzureBlobFs) IsNotExist(err error) bool {
 	if err == nil {
 		return false
 	}
-	var respErr *azcore.ResponseError
-	if errors.As(err, &respErr) {
+	if respErr, ok := errors.AsType[*azcore.ResponseError](err); ok {
 		return respErr.StatusCode == http.StatusNotFound
 	}
 	// os.ErrNotExist can be returned internally by fs.Stat
@@ -497,8 +495,7 @@ func (*AzureBlobFs) IsPermission(err error) bool {
 	if err == nil {
 		return false
 	}
-	var respErr *azcore.ResponseError
-	if errors.As(err, &respErr) {
+	if respErr, ok := errors.AsType[*azcore.ResponseError](err); ok {
 		return respErr.StatusCode == http.StatusForbidden || respErr.StatusCode == http.StatusUnauthorized
 	}
 	return false
@@ -516,8 +513,7 @@ func (*AzureBlobFs) isBadRequestError(err error) bool {
 	if err == nil {
 		return false
 	}
-	var respErr *azcore.ResponseError
-	if errors.As(err, &respErr) {
+	if respErr, ok := errors.AsType[*azcore.ResponseError](err); ok {
 		return respErr.StatusCode == http.StatusBadRequest
 	}
 	return false
@@ -527,6 +523,8 @@ func (*AzureBlobFs) isBadRequestError(err error) bool {
 func (fs *AzureBlobFs) CheckRootPath(username string, uid int, gid int) bool {
 	// we need a local directory for temporary files
 	osFs := NewOsFs(fs.ConnectionID(), fs.localTempDir, "", nil)
+	defer osFs.Close() //nolint:errcheck
+
 	return osFs.CheckRootPath(username, uid, gid)
 }
 
@@ -847,6 +845,10 @@ func (fs *AzureBlobFs) renameInternal(source, target string, srcInfo os.FileInfo
 		filesSize += srcInfo.Size()
 	}
 	err := fs.skipNotExistErr(fs.Remove(source, srcInfo.IsDir()))
+	if err != nil && !srcInfo.IsDir() {
+		numFiles--
+		filesSize -= srcInfo.Size()
+	}
 	return numFiles, filesSize, err
 }
 
@@ -1125,9 +1127,9 @@ func (fs *AzureBlobFs) getCopyOptions(srcInfo os.FileInfo, updateModTime bool) *
 		for k, v := range getMetadata(srcInfo) {
 			if v != "" {
 				if strings.EqualFold(k, lastModifiedField) {
-					metadata[k] = to.Ptr("0")
+					metadata[k] = new("0")
 				} else {
-					metadata[k] = to.Ptr(v)
+					metadata[k] = new(v)
 				}
 			}
 		}
